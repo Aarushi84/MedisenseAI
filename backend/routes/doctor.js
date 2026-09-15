@@ -289,20 +289,109 @@ router.get("/patient-reports", requireDoctor, async (req, res) => {
 router.post("/generate-summary", requireDoctor, async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) return res.status(400).json({ error: "No text provided" });
 
-  const flaskRes = await fetch(`${process.env.AI_SERVICE_URL}/pdf-summary`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+    if (!text) {
+      return res.status(400).json({ error: "No text provided" });
+    }
+
+    const HF_TOKEN = process.env.HF_TOKEN;
+    const HF_MODEL =
+      process.env.HF_MODEL || "deepseek-ai/DeepSeek-R1";
+
+    if (!HF_TOKEN) {
+      console.error("HF_TOKEN is missing");
+      return res.status(500).json({
+        error: "AI service not configured",
+      });
+    }
+
+    const prompt = `
+You are MediSense AI, a clinical AI assistant for physicians.
+
+Generate a concise clinical summary from the patient information below.
+
+Rules:
+- Use ONLY the information provided.
+- Do not invent symptoms, diagnoses, medicines, test results, or values.
+- Highlight important clinical findings.
+- Keep the language professional and clear.
+- This is an AI-generated summary and does not replace clinical judgment.
+
+PATIENT INFORMATION:
+${text}
+
+Generate the clinical summary now.
+`;
+
+    const hfResponse = await fetch(
+      "https://router.huggingface.co/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: HF_MODEL,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are MediSense AI, a clinical assistant helping physicians summarize patient information accurately.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          max_tokens: 1000,
+          temperature: 0.2,
+        }),
+      }
+    );
+
+    const data = await hfResponse.json();
+
+    if (!hfResponse.ok) {
+      console.error("HUGGING FACE SUMMARY ERROR:", data);
+      throw new Error(
+        data?.error?.message ||
+        data?.error ||
+        "Hugging Face request failed"
+      );
+    }
+
+    let summary =
+      data?.choices?.[0]?.message?.content || "";
+
+    // Remove DeepSeek thinking
+    summary = summary
+      .replace(/<think>[\s\S]*?<\/think>/gi, "")
+      .trim();
+
+    // Remove Markdown code fences
+    summary = summary
+      .replace(/^```(?:json|text)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    if (!summary) {
+      throw new Error("AI returned an empty summary");
+    }
+
+    res.json({
+      summary: summary,
     });
-    const data = await flaskRes.json();
-    if (data.error) throw new Error(data.error);
 
-    res.json(data);
   } catch (err) {
-    console.log("GENERATE SUMMARY ERROR:", err.message);
-    res.status(500).json({ error: "Failed to generate summary" });
+    console.error(
+      "GENERATE SUMMARY ERROR:",
+      err.message || err
+    );
+
+    res.status(500).json({
+      error: "Failed to generate summary",
+    });
   }
 });
 module.exports = router;
