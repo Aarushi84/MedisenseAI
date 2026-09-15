@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const ollama = require("ollama").default;
+const axios = require("axios");
 
 const Report = require("../models/Report");
 
@@ -12,11 +12,11 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Message required" });
     }
 
-    // 🔥 GET LATEST REPORT
+    // GET LATEST REPORT
     const report = await Report.findOne({ patientName: name || "" })
       .sort({ date: -1 });
 
-    // ✅ STRONGER REPORT CONTEXT (IMPORTANT FIX)
+    // STRONG REPORT CONTEXT
     let reportContext = "No report found for this patient.";
 
     if (report) {
@@ -58,24 +58,69 @@ RULES (VERY IMPORTANT):
 ${reportContext}
 `;
 
-    const response = await ollama.chat({
-      model: "llama3.2:3b",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
-      ],
-    });
+    const HF_TOKEN = process.env.HF_TOKEN;
+    const HF_MODEL =
+      process.env.HF_MODEL || "deepseek-ai/DeepSeek-R1";
+
+    if (!HF_TOKEN) {
+      console.error("HF_TOKEN is missing");
+      return res.status(500).json({ error: "AI service not configured" });
+    }
+
+    const response = await axios.post(
+      "https://router.huggingface.co/v1/chat/completions",
+      {
+        model: HF_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: message,
+          },
+        ],
+        max_tokens: 1000,
+        temperature: 0.2,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 120000,
+      }
+    );
+
+    let reply =
+      response.data?.choices?.[0]?.message?.content || "";
+
+    // Remove DeepSeek thinking section
+    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+    // Remove Markdown code fences if returned
+    reply = reply
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
 
     return res.json({
-      reply: response.message.content,
+      reply,
       reportUsed: !!report,
       reportId: report ? report._id : null,
-      image: report ? report.image : null,   // ✅ IMPORTANT FIX YOU ASKED
+      image: report ? report.image : null,
     });
 
   } catch (err) {
-    console.log("Chat Error:", err);
-    res.status(500).json({ error: "Chat failed" });
+    console.error(
+      "Chat Error:",
+      err.response?.data || err.message || err
+    );
+
+    return res.status(500).json({
+      error: "Chat failed",
+    });
   }
 });
 
