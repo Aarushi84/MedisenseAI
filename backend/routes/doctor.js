@@ -251,14 +251,34 @@ router.get("/document/:id/download", requireDoctor, async (req, res) => {
 router.get("/patient-reports", requireDoctor, async (req, res) => {
   try {
     const { name } = req.query;
-    if (!name) return res.status(400).json({ error: "Patient name required" });
 
+    if (!name) {
+      return res.status(400).json({ error: "Patient name required" });
+    }
+
+    // Find the patient from the User collection first
+    const patient = await User.findOne({
+      name: name,
+      role: "patient",
+    }).select("_id name");
+
+    if (!patient) {
+      return res.json({ reports: [] });
+    }
+
+    // Find reports using patientId OR patientName
+    // This keeps compatibility with existing reports.
     const reports = await Report.find({
-      patientName: name,
+      $or: [
+        { patientId: patient._id.toString() },
+        { patientName: patient.name },
+      ],
       disease: { $ne: "" },
     })
       .sort({ createdAt: -1 })
-      .select("disease severity summary symptoms bloodPressure bloodSugar height weight duration createdAt");
+      .select(
+        "disease severity summary symptoms bloodPressure bloodSugar height weight duration createdAt"
+      );
 
     res.json({ reports });
   } catch (err) {
