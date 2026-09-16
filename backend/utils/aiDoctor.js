@@ -32,19 +32,32 @@ async function callHF(prompt) {
       }
     );
 
-    let text =
-      response.data?.choices?.[0]?.message?.content || "";
+    const message = response.data?.choices?.[0]?.message || {};
 
-    // Remove DeepSeek thinking
+    // Different Hugging Face / DeepSeek responses may place the answer
+    // in content, reasoning_content, or (less commonly) text.
+    let text =
+      message.content ||
+      message.reasoning_content ||
+      response.data?.choices?.[0]?.text ||
+      "";
+
+    if (typeof text !== "string") {
+      text = JSON.stringify(text);
+    }
+
+    // Remove DeepSeek thinking blocks when they are included in content.
     text = text
       .replace(/<think>[\s\S]*?<\/think>/gi, "")
       .trim();
 
-    // Remove markdown fences
+    // Remove markdown fences.
     text = text
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
+
+    console.log("HF AI RESPONSE:", text);
 
     return text;
   } catch (err) {
@@ -66,7 +79,7 @@ You are MediSense AI, a medical assistant generating a patient report.
 Patient condition:
 ${text}
 
-Return ONLY valid JSON.
+Return ONLY one valid JSON object. Do not write anything before or after the JSON.
 
 Required format:
 {
@@ -90,29 +103,34 @@ Rules:
   try {
     const raw = await callHF(prompt);
 
-    // Extract JSON even if DeepSeek adds extra text
+    if (!raw || !raw.trim()) {
+      throw new Error("Empty response returned by AI");
+    }
+
+    // Extract the first JSON object even if the model adds surrounding text.
     const start = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
 
-    if (start === -1 || end === -1) {
-      throw new Error("No JSON object returned by AI");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error(`No JSON object returned by AI. Raw response: ${raw}`);
     }
 
-    const parsed = JSON.parse(
-      raw.substring(start, end + 1)
-    );
+    const jsonText = raw.substring(start, end + 1);
+    const parsed = JSON.parse(jsonText);
 
     return {
-      severity: parsed.severity || "Moderate",
+      severity: ["Low", "Moderate", "High"].includes(parsed.severity)
+        ? parsed.severity
+        : "Moderate",
       summary: parsed.summary || "",
       abnormalities: Array.isArray(parsed.abnormalities)
-        ? parsed.abnormalities
+        ? parsed.abnormalities.map(String)
         : [],
       treatments: Array.isArray(parsed.treatments)
-        ? parsed.treatments
+        ? parsed.treatments.map(String)
         : [],
       warnings: Array.isArray(parsed.warnings)
-        ? parsed.warnings
+        ? parsed.warnings.map(String)
         : [],
       seeDoctorReason:
         parsed.seeDoctorReason || "Please consult a doctor",
