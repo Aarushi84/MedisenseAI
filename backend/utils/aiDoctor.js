@@ -1,55 +1,74 @@
 const axios = require("axios");
 
-// ---------------- OLLAMA CALL (CLEAN + SAFE) ----------------
-async function callOllama(prompt) {
+async function callHF(prompt) {
   try {
-    const response = await axios.post("http://localhost:11434/api/chat", {
-      model: "llama3.2:3b",
-      stream: false,
-      format: "json",
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    });
+    const HF_TOKEN = process.env.HF_TOKEN;
+    const HF_MODEL =
+      process.env.HF_MODEL || "deepseek-ai/DeepSeek-R1";
 
-    let text = response.data.message?.content || "";
-    console.log("RAW OLLAMA RESPONSE:", text);
+    if (!HF_TOKEN) {
+      throw new Error("HF_TOKEN is missing");
+    }
 
-    const parsed = JSON.parse(text);
+    const response = await axios.post(
+      "https://router.huggingface.co/v1/chat/completions",
+      {
+        model: HF_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        max_tokens: 1200,
+        temperature: 0.2,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 120000,
+      }
+    );
 
-    return {
-      severity: parsed.severity || "Moderate",
-      summary: parsed.summary || "",
-      abnormalities: parsed.abnormalities || [],
-      treatments: parsed.treatments || [],
-      warnings: parsed.warnings || [],
-      seeDoctorReason: parsed.seeDoctorReason || ""
-    };
+    let text =
+      response.data?.choices?.[0]?.message?.content || "";
 
+    // Remove DeepSeek thinking
+    text = text
+      .replace(/<think>[\s\S]*?<\/think>/gi, "")
+      .trim();
+
+    // Remove markdown fences
+    text = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    return text;
   } catch (err) {
-    console.log("Ollama error:", err.message);
-
-    return {
-      severity: "Moderate",
-      summary: "Could not generate summary",
-      abnormalities: [],
-      treatments: [],
-      warnings: [],
-      seeDoctorReason: "Please consult a doctor"
-    };
+    console.log(
+      "Hugging Face error:",
+      err.response?.data || err.message
+    );
+    throw err;
   }
 }
 
+
 // ---------------- SYMPTOM ANALYZER ----------------
+
 async function analyzeSymptom({ text }) {
   const prompt = `
-You are an experienced medical doctor writing a patient report.
+You are MediSense AI, a medical assistant generating a patient report.
 
-Patient condition: ${text}
+Patient condition:
+${text}
 
-Return ONLY valid JSON. No explanation. No markdown.
+Return ONLY valid JSON.
 
-JSON format:
+Required format:
 {
   "severity": "Low | Moderate | High",
   "summary": "3-4 sentence medical explanation",
@@ -60,41 +79,93 @@ JSON format:
 }
 
 Rules:
-- MUST return valid JSON only
-- All keys must exist
-- All arrays must contain strings
+- Return valid JSON only.
+- No markdown.
+- All keys must exist.
+- All arrays must contain strings.
+- Do not invent patient information.
+- Do not claim certainty when the information is insufficient.
 `;
 
-  return await callOllama(prompt);
+  try {
+    const raw = await callHF(prompt);
+
+    // Extract JSON even if DeepSeek adds extra text
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+
+    if (start === -1 || end === -1) {
+      throw new Error("No JSON object returned by AI");
+    }
+
+    const parsed = JSON.parse(
+      raw.substring(start, end + 1)
+    );
+
+    return {
+      severity: parsed.severity || "Moderate",
+      summary: parsed.summary || "",
+      abnormalities: Array.isArray(parsed.abnormalities)
+        ? parsed.abnormalities
+        : [],
+      treatments: Array.isArray(parsed.treatments)
+        ? parsed.treatments
+        : [],
+      warnings: Array.isArray(parsed.warnings)
+        ? parsed.warnings
+        : [],
+      seeDoctorReason:
+        parsed.seeDoctorReason || "Please consult a doctor",
+    };
+  } catch (err) {
+    console.log(
+      "SYMPTOM AI ERROR:",
+      err.response?.data || err.message
+    );
+
+    return {
+      severity: "Moderate",
+      summary: "Could not generate summary",
+      abnormalities: [],
+      treatments: [],
+      warnings: [],
+      seeDoctorReason: "Please consult a doctor",
+    };
+  }
 }
 
+
 // ---------------- CHAT ASSISTANT ----------------
+
 async function chatAssistant({ report, question }) {
   const prompt = `
-You are a medical assistant.
+You are MediSense AI medical assistant.
 
-Context:
-${report || "No report"}
+Patient report:
+${report || "No report available"}
 
 Question:
 ${question}
 
-Give simple, safe medical explanation.
+Give a simple, safe medical explanation.
+Do not invent patient information.
 `;
 
   try {
-    const res = await axios.post("http://localhost:11434/api/chat", {
-      model: "llama3.2:3b",
-      stream: false,
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    });
-
-    return res.data.message?.content || "No response";
+    const reply = await callHF(prompt);
+    return reply || "No response";
   } catch (err) {
+    console.log(
+      "CHAT AI ERROR:",
+      err.response?.data || err.message
+    );
+
     return "AI unavailable";
   }
 }
 
-module.exports = { analyzeSymptom, chatAssistant };
+
+module.exports = {
+  analyzeSymptom,
+  chatAssistant,
+};
