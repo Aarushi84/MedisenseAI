@@ -74,15 +74,94 @@ router.post("/predict-image", upload.single("image"), async (req, res) => {
     let disease = "Unknown";
     let confidence = 0;
 
-    try {
-      const flaskRes = await axios.post(`${process.env.AI_SERVICE_URL}/predict`, {
-        image: imgBuffer.toString("base64")
-      });
-      disease = flaskRes.data?.disease || "Unknown";
-      confidence = flaskRes.data?.confidence || 0;
-    } catch (err) {
-      console.log("FLASK IMAGE FAIL:", err.response?.data || err.message);
+  try {
+  const { Client, handle_file } = await import("@gradio/client");
+
+  const HF_TOKEN = process.env.HF_TOKEN;
+
+  if (!HF_TOKEN) {
+    throw new Error("HF_TOKEN is missing");
+  }
+
+  const client = await Client.connect(
+    "Aarushi12/MediSense-AI",
+    {
+      token: HF_TOKEN,
     }
+  );
+
+  const result = await client.predict(
+    "/gradio_predict",
+    {
+      image: handle_file(req.file.path),
+    }
+  );
+
+  console.log("GRADIO RESULT:", result);
+
+  const output = result?.data;
+
+  /*
+    Handle common Gradio response shapes.
+  */
+  if (Array.isArray(output)) {
+    if (typeof output[0] === "object" && output[0] !== null) {
+      disease =
+        output[0].disease ||
+        output[0].label ||
+        output[0].prediction ||
+        output[0].class ||
+        "Unknown";
+
+      confidence =
+        Number(
+          output[0].confidence ??
+          output[0].score ??
+          0
+        );
+
+    } else {
+      disease = output[0] || "Unknown";
+      confidence = Number(output[1] || 0);
+    }
+  } else if (output && typeof output === "object") {
+    disease =
+      output.disease ||
+      output.label ||
+      output.prediction ||
+      output.class ||
+      "Unknown";
+
+    confidence =
+      Number(
+        output.confidence ??
+        output.score ??
+        0
+      );
+  } else if (typeof output === "string") {
+    disease = output;
+  }
+
+  // Convert decimal confidence to percentage if necessary
+  if (confidence > 0 && confidence <= 1) {
+    confidence = confidence * 100;
+  }
+
+  console.log(
+    "FINAL PREDICTION:",
+    disease,
+    confidence
+  );
+
+} catch (err) {
+  console.log(
+    "GRADIO IMAGE FAIL:",
+    err.message || err
+  );
+
+  disease = "Unknown";
+  confidence = 0;
+}
 
     const ai = await aiDoctor.analyzeSymptom({
       text: `Patient diagnosed with ${disease} (${confidence}%)`
