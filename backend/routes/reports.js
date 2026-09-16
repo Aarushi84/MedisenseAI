@@ -120,10 +120,17 @@ router.post("/predict-image", upload.single("image"), async (req, res) => {
           0
         );
 
-    } else {
-      disease = output[0] || "Unknown";
-      confidence = Number(output[1] || 0);
-    }
+ } else {
+  disease = output[0] || "Unknown";
+
+  const rawConfidence = output[1];
+
+  if (typeof rawConfidence === "string") {
+    confidence = parseFloat(rawConfidence.replace("%", ""));
+  } else {
+    confidence = Number(rawConfidence || 0);
+  }
+}
   } else if (output && typeof output === "object") {
     disease =
       output.disease ||
