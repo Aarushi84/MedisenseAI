@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const axios = require("axios");
 const fs = require("fs");
 const pdfParse = require("pdf-parse");
 
@@ -257,7 +256,15 @@ router.post("/upload-pdf", upload.single("file"), async (req, res) => {
       console.log("FLASK PDF FAIL:", err.response?.data || err.message);
     }
 
-    const ai = await aiDoctor.analyzeSymptom({ text });
+
+const ai = await aiDoctor.analyzeSymptom({ text });
+
+const summary = ai?.summary || "";
+
+const severity = ["Low", "Moderate", "High"].includes(ai?.severity)
+  ? ai.severity
+  : "Moderate";
+
 
     res.json({
       filename: req.file.originalname,
