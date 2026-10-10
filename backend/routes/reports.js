@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const axios = require("axios");
 const fs = require("fs");
 const pdfParse = require("pdf-parse");
 
@@ -244,17 +245,19 @@ router.post("/upload-pdf", upload.single("file"), async (req, res) => {
       console.log("PDF PARSE FAIL:", e.message);
     }
 
-  
+    let summary = "";
+    let severity = "Moderate";
 
+    try {
+      const flaskRes = await axios.post(`${process.env.AI_SERVICE_URL}/pdf-summary`, { text });
+      summary = flaskRes.data?.summary || "";
+      const risk = flaskRes.data?.riskLevel;
+      severity = ["Low", "Moderate", "High"].includes(risk) ? risk : "Moderate";
+    } catch (err) {
+      console.log("FLASK PDF FAIL:", err.response?.data || err.message);
+    }
 
-const ai = await aiDoctor.analyzeSymptom({ text });
-
-const summary = ai?.summary || "";
-
-const severity = ["Low", "Moderate", "High"].includes(ai?.severity)
-  ? ai.severity
-  : "Moderate";
-
+    const ai = await aiDoctor.analyzeSymptom({ text });
 
     res.json({
       filename: req.file.originalname,
