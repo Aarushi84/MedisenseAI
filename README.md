@@ -1,4 +1,4 @@
-# MediSense AI 🏥
+# MediSense AI 
 
 **An AI-assisted healthcare web app for preliminary skin-condition analysis, medical report summarization, and digital patient records.**
 
@@ -16,7 +16,7 @@
 - **AI Service (Hugging Face Space):** https://huggingface.co/spaces/Aarushi12/MediSense-AI
 - **GitHub Repository:** https://github.com/Aarushi84/MedisenseAI
 
-## 📌 Overview
+##  Overview
 
 MediSense AI is a full-stack healthcare project with separate interfaces for patients and doctors. It combines AI-assisted analysis with stored medical records and a dashboard.
 
@@ -24,9 +24,9 @@ Patients can submit symptoms, upload skin images for preliminary classification,
 
 The app uses JWT-based authentication and role-based access to separate patient and doctor features.
 
-## ✨ Features
+##  Features
 
-### 👤 Patient Portal
+###  Patient Portal
 
 - Submit symptoms for AI-assisted preliminary analysis.
 - Upload a skin image for classification (disease label and confidence score).
@@ -34,21 +34,21 @@ The app uses JWT-based authentication and role-based access to separate patient 
 - View analysis results, warnings and general recommendations.
 - Chat with an AI health assistant.
 
-### 🩺 Doctor Portal
+###  Doctor Portal
 
 - Dashboard with patient statistics and health trends.
 - Register patients manually, including walk-in patients.
 - Review patient vitals, notes and available AI results.
 - Use AI-assisted tools for clinical information lookup.
 
-### 🔐 Authentication and Security
+### Authentication and Security
 
 - JWT-based authentication.
 - Role-based authorization for patients and doctors.
 - Protected API routes using backend middleware.
 - MongoDB-backed storage for application data.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technologies |
 |---|---|
@@ -75,7 +75,7 @@ This model runs through Hugging Face Inference Providers and is called by the Ex
 
 - **Symptom analysis and the patient chat assistant:** the model in `HF_MODEL` (default `deepseek-ai/DeepSeek-R1`).
 
-## 🏗️ Architecture
+##  Architecture
 
 ```text
                   Patient / Doctor
@@ -116,7 +116,7 @@ The doctor dashboard uses stored patient data for its charts and does not run a 
 | `POST /chat` | Short clinical reference answer |
 | `/gradio` | Gradio web UI (skin detection, report summary with PDF download, clinical assistant) |
 
-## ☁️ Deployment
+##  Deployment
 
 | Service | Platform | Purpose |
 |---|---|---|
@@ -125,7 +125,7 @@ The doctor dashboard uses stored patient data for its charts and does not run a 
 | AI Service | Hugging Face Spaces | FastAPI endpoints and Gradio UI |
 | Database | MongoDB Atlas | Persistent application data |
 
-## ⚙️ Local Setup
+##  Local Setup
 
 ### Prerequisites
 
@@ -200,7 +200,7 @@ REACT_APP_API_URL=http://localhost:5000
 npm start
 ```
 
-## 🔑 Environment Variables
+##  Environment Variables
 
 | Variable | Used by | Purpose |
 |---|---|---|
@@ -214,7 +214,7 @@ npm start
 
 Never commit real keys, tokens, JWT secrets or database credentials.
 
-## ⚠️ Limitations
+##  Limitations
 
 - This is a portfolio project, not a production medical system.
 - AI results are preliminary and can be wrong. A confidence score is not a guarantee.
@@ -228,7 +228,7 @@ Never commit real keys, tokens, JWT secrets or database credentials.
 - Uploaded files are stored on the backend's local disk, which is cleared on restarts on free hosting plans.
 - Rate limiting, full request validation and automated tests are not yet in place.
 
-## 🚀 Future Improvements
+##  Future Improvements
 
 - Switch to a more reliable or cheaper provider for the summary and chat steps.
 - Add rate limiting, stronger request validation and restricted CORS.
@@ -236,7 +236,7 @@ Never commit real keys, tokens, JWT secrets or database credentials.
 - Add automated tests and API documentation.
 - Improve clinical analytics and patient history views.
 
-## 👩‍💻 Author
+##  Author
 
 **Aarushi Singh**
 
